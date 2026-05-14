@@ -76,11 +76,39 @@ export type CompareReport =
     }
   | {
       status: "ready";
+      summary: string;
       metrics: CompareMetrics;
       insights: string[];
       topQuestions: CompareItem[];
       categorySummary: CategorySummary[];
     };
+
+function buildSummary(m: CompareMetrics): string {
+  if (m.bothAnswered === 0) {
+    return "Ainda não há perguntas respondidas pelos dois. Por enquanto, este espaço fica em silêncio.";
+  }
+  const parts: string[] = [];
+  const both = m.bothAnswered;
+  const compatWord = m.strongCompat === 1 ? "tem" : "têm";
+  parts.push(
+    `Em ${both} ${both === 1 ? "pergunta respondida" : "perguntas respondidas"} pelos dois, ${m.strongCompat} ${compatWord} forte compatibilidade.`,
+  );
+  if (m.sharedLimit > 0 && m.attention > 0) {
+    parts.push(
+      `Vocês compartilham ${m.sharedLimit} ${m.sharedLimit === 1 ? "limite rígido" : "limites rígidos"} e há ${m.attention} ${m.attention === 1 ? "ponto" : "pontos"} que pedem uma conversa antes.`,
+    );
+  } else if (m.sharedLimit > 0) {
+    parts.push(
+      `Vocês compartilham ${m.sharedLimit} ${m.sharedLimit === 1 ? "limite rígido" : "limites rígidos"}.`,
+    );
+  } else if (m.attention > 0) {
+    parts.push(
+      `Há ${m.attention} ${m.attention === 1 ? "ponto" : "pontos"} que pedem uma conversa antes de qualquer coisa.`,
+    );
+  }
+  parts.push("Este mapa é só ponto de partida — quem conduz a conversa são vocês.");
+  return parts.join(" ");
+}
 
 function isEnjoyOrLove(p: Preference | null): boolean {
   return p === "aproveitar" || p === "amar";
@@ -298,6 +326,7 @@ export function buildCompareReport(
 
   return {
     status: "ready",
+    summary: buildSummary(metrics),
     metrics,
     insights: pickInsights(metrics),
     topQuestions,

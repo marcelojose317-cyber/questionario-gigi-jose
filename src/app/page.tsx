@@ -1,65 +1,356 @@
-import Image from "next/image";
+import Link from "next/link";
+import { headers } from "next/headers";
+import { AppShell } from "@/components/AppShell";
+import { SafetyNotice } from "@/components/SafetyNotice";
+import { UserStatusCard } from "@/components/UserStatusCard";
+import { MetricCard } from "@/components/MetricCard";
+import { InsightCard } from "@/components/InsightCard";
+import { ProgressBar } from "@/components/ProgressBar";
+import type { CompareItem, CompareReport } from "@/lib/compare";
+import { PREFERENCE_LABELS, type Preference } from "@/data/questionnaire";
 
-export default function Home() {
+type CompareApiResponse = {
+  users: {
+    gigi: {
+      id: string;
+      name: string;
+      slug: string;
+      role: string | null;
+      orientation: string | null;
+      answeredCount: number;
+    };
+    jose: {
+      id: string;
+      name: string;
+      slug: string;
+      role: string | null;
+      orientation: string | null;
+      answeredCount: number;
+    };
+  };
+  totalQuestions: number;
+  report: CompareReport;
+};
+
+type ReadyReport = Extract<CompareReport, { status: "ready" }>;
+type WaitingReport = Extract<CompareReport, { status: "waiting_for_jose" }>;
+
+async function fetchCompare(): Promise<CompareApiResponse> {
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? "http";
+  const res = await fetch(`${proto}://${host}/api/compare`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new Error(`Falha ao consultar /api/compare (${res.status})`);
+  }
+  return res.json();
+}
+
+export default async function Home() {
+  const data = await fetchCompare();
+  const { users, totalQuestions, report } = data;
+
+  const gigiStatus = "Concluído";
+  const joseStatus =
+    users.jose.answeredCount === 0
+      ? "Pendente"
+      : `Em progresso · ${users.jose.answeredCount} de ${totalQuestions}`;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <AppShell>
+      <div className="space-y-10">
+        <header className="space-y-3 max-w-2xl">
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight leading-tight">
+            Mapa de <span className="lilac-text">Compatibilidade</span>
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="muted-text text-base leading-relaxed">
+            Preferências, limites e pontos de conversa em um espaço privado.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        </header>
+
+        <SafetyNotice />
+
+        <section className="grid sm:grid-cols-2 gap-4">
+          <UserStatusCard
+            name="Giovana"
+            slug="gigi"
+            status={gigiStatus}
+            answered={users.gigi.answeredCount}
+            total={totalQuestions}
+          />
+          <UserStatusCard
+            name="José"
+            slug="jose"
+            status={joseStatus}
+            answered={users.jose.answeredCount}
+            total={totalQuestions}
+          />
+        </section>
+
+        {report.status === "waiting_for_jose" ? (
+          <WaitingState report={report} />
+        ) : (
+          <ReadyState report={report} />
+        )}
+      </div>
+    </AppShell>
+  );
+}
+
+function WaitingState({ report }: { report: WaitingReport }) {
+  return (
+    <div className="glass-card p-8 sm:p-10">
+      <div className="flex items-start gap-5">
+        <div
+          className="hidden sm:block w-1 h-14 rounded-full shrink-0 mt-1"
+          style={{
+            background: "var(--gradient-primary)",
+            boxShadow: "var(--glow-lilac)",
+          }}
+          aria-hidden
+        />
+        <div className="space-y-4 max-w-xl">
+          <h2 className="section-title">Aguardando José</h2>
+          <p className="muted-text text-sm leading-relaxed">
+            O comparativo completo será liberado depois que José finalizar o
+            questionário.
+          </p>
+          <p
+            className="text-xs"
+            style={{ color: "var(--text-secondary)" }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Atualmente:{" "}
+            <span className="lilac-text">
+              {report.joseAnswered} de {report.threshold}
+            </span>{" "}
+            respostas mínimas para liberar o relatório.
+          </p>
+          <div className="flex flex-wrap gap-3 pt-1">
+            <Link href="/questionario/jose" className="btn-primary">
+              Responder como José
+            </Link>
+            <Link href="/questionario/gigi" className="btn-secondary">
+              Ver respostas da Gigi
+            </Link>
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
+}
+
+function ReadyState({ report }: { report: ReadyReport }) {
+  const m = report.metrics;
+  return (
+    <>
+      <section className="space-y-4">
+        <div className="flex items-baseline justify-between">
+          <h2 className="section-title">Métricas</h2>
+          <span className="text-[11px] muted-text uppercase tracking-[0.22em]">
+            Visão geral
+          </span>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <MetricCard
+            label="Compatibilidade"
+            value={`${m.compatibilityPercent}%`}
+            hint={`em ${m.bothAnswered} perguntas`}
+            accent="lilac"
+          />
+          <MetricCard
+            label="Total"
+            value={m.totalQuestions}
+            hint="perguntas no questionário"
+          />
+          <MetricCard
+            label="Gigi"
+            value={m.gigiAnswered}
+            hint="respostas registradas"
+          />
+          <MetricCard
+            label="José"
+            value={m.joseAnswered}
+            hint="respostas registradas"
+          />
+          <MetricCard
+            label="Fortes"
+            value={m.strongCompat}
+            hint="ambos gostam ou amam"
+          />
+          <MetricCard
+            label="Curiosidades"
+            value={m.sharedCuriosity}
+            hint="em comum"
+          />
+          <MetricCard
+            label="Limites"
+            value={m.sharedLimit}
+            hint="rígidos compartilhados"
+          />
+          <MetricCard
+            label="Atenção"
+            value={m.attention}
+            hint="conversar antes"
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="section-title">Mini relatório</h2>
+        <div className="glass-card p-6 sm:p-7">
+          <p className="text-base leading-relaxed text-white/90">
+            {report.summary}
+          </p>
+        </div>
+      </section>
+
+      {report.insights.length > 0 ? (
+        <section className="space-y-4">
+          <h2 className="section-title">Insights</h2>
+          <div className="space-y-2.5">
+            {report.insights.map((text, i) => (
+              <InsightCard key={i} text={text} index={i + 1} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {report.topQuestions.length > 0 ? (
+        <section className="space-y-4">
+          <div>
+            <h2 className="section-title">Para conversar primeiro</h2>
+            <p className="muted-text text-sm mt-1">
+              Cinco perguntas onde há mais o que ouvir — sem julgamento.
+            </p>
+          </div>
+          <div className="space-y-2.5">
+            {report.topQuestions.map((q) => (
+              <TopQuestion key={q.questionId} item={q} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {report.categorySummary.length > 0 ? (
+        <section className="space-y-4">
+          <h2 className="section-title">Por categoria</h2>
+          <div className="soft-card overflow-hidden" style={{ padding: 0 }}>
+            {report.categorySummary.map((c, idx) => (
+              <div
+                key={c.category}
+                className="grid grid-cols-[1fr_90px_56px] sm:grid-cols-[1fr_180px_60px] items-center gap-4 px-5 py-4"
+                style={
+                  idx === 0
+                    ? undefined
+                    : { borderTop: "1px solid var(--border-soft)" }
+                }
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {c.category}
+                  </div>
+                  <div className="text-xs muted-text mt-0.5">
+                    {c.bothAnswered} de {c.totalQuestions} respondidas pelos
+                    dois
+                  </div>
+                </div>
+                <ProgressBar
+                  value={c.compatibilityPercent}
+                  ariaLabel={`${c.category}: ${c.compatibilityPercent}%`}
+                />
+                <div
+                  className="text-right text-sm tabular-nums font-medium"
+                  style={{ color: "var(--text-lilac)" }}
+                >
+                  {c.compatibilityPercent}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function TopQuestion({ item }: { item: CompareItem }) {
+  const tag = priorityTag(item);
+  return (
+    <div className="soft-card p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1.5 min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.22em] muted-text">
+            {item.category}
+          </div>
+          <div className="text-sm font-medium leading-snug">
+            {item.activity}
+          </div>
+        </div>
+        {tag ? (
+          <span
+            className="text-[10px] uppercase tracking-[0.18em] px-2.5 py-1 rounded-full shrink-0 whitespace-nowrap"
+            style={{
+              background: "rgba(167, 139, 250, 0.08)",
+              color: "var(--text-lilac)",
+              border: "1px solid var(--border-soft)",
+            }}
+          >
+            {tag}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs">
+        <PrefPill name="Gigi" pref={item.gigi} />
+        <PrefPill name="José" pref={item.jose} />
+      </div>
+    </div>
+  );
+}
+
+function PrefPill({ name, pref }: { name: string; pref: Preference | null }) {
+  const label = pref ? PREFERENCE_LABELS[pref] : "—";
+  const style: React.CSSProperties =
+    pref === "limite_rigido"
+      ? {
+          color: "#f5f3fa",
+          background: "rgba(20, 20, 28, 0.85)",
+          border: "1px solid var(--border-strong)",
+        }
+      : pref === "amar" || pref === "aproveitar"
+        ? {
+            color: "var(--text-lilac)",
+            background: "rgba(167, 139, 250, 0.1)",
+            border: "1px solid rgba(167, 139, 250, 0.3)",
+          }
+        : pref === "curioso"
+          ? {
+              color: "var(--text-secondary)",
+              background: "rgba(255, 255, 255, 0.04)",
+              border: "1px solid var(--border-soft)",
+            }
+          : {
+              color: "var(--text-muted)",
+              background: "rgba(255, 255, 255, 0.03)",
+              border: "1px solid var(--border-soft)",
+            };
+  return (
+    <span
+      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full"
+      style={style}
+    >
+      <span className="muted-text">{name}</span>
+      <span className="font-medium">{label}</span>
+    </span>
+  );
+}
+
+function priorityTag(item: CompareItem): string | null {
+  if (item.flags.attention) return "Ponto de atenção";
+  if (item.flags.largeGap) return "Divergência grande";
+  if (item.flags.sharedLimit) return "Limite compartilhado";
+  if (item.flags.strongCompat) return "Compatibilidade forte";
+  if (item.flags.sharedCuriosity) return "Curiosidade em comum";
+  return null;
 }
