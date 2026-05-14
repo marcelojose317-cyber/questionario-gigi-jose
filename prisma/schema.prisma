@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id               String   @id @default(cuid())
+  name             String
+  slug             String   @unique
+  role             String?
+  specificFetishes String?
+  painTolerance    Int?
+  orientation      String?
+  medicalCondition String?
+  limitations      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  answers Answer[]
+}
+
+model Question {
+  id       String @id @default(cuid())
+  category String
+  activity String
+  order    Int
+
+  answers Answer[]
+
+  @@unique([category, activity])
+  @@index([category, order])
+}
+
+model Answer {
+  id         String   @id @default(cuid())
+  userId     String
+  questionId String
+  experience String?
+  preference String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, questionId])
+  @@index([userId])
+  @@index([questionId])
+}
