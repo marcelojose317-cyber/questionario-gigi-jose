@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { AppShell } from "@/components/AppShell";
 import { SafetyNotice } from "@/components/SafetyNotice";
+import { prisma } from "@/lib/prisma";
 import {
   CATEGORIES,
   PREFERENCE_LABELS,
@@ -21,53 +21,53 @@ type GigiAnswer = {
   experience: string | null;
   preference: string | null;
   notes: string | null;
-  updatedAt: string;
+  updatedAt: Date;
 };
-
-type GigiResponse = {
-  profile: {
-    id: string;
-    name: string;
-    slug: string;
-    role: string | null;
-    specificFetishes: string | null;
-    painTolerance: number | null;
-    orientation: string | null;
-    medicalCondition: string | null;
-    limitations: string | null;
-    createdAt: string;
-    updatedAt: string;
-  };
-  answers: GigiAnswer[];
-};
-
-async function fetchGigi(): Promise<GigiResponse> {
-  const h = await headers();
-  const host = h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  const res = await fetch(`${proto}://${host}/api/responses/gigi`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`Falha ao consultar /api/responses/gigi (${res.status})`);
-  }
-  return res.json();
-}
 
 export default async function Page() {
-  const data = await fetchGigi();
-  const { profile, answers } = data;
+  const user = await prisma.user.findUnique({
+    where: { slug: "gigi" },
+    include: {
+      answers: { include: { question: true } },
+    },
+  });
+
+  if (!user) {
+    return (
+      <AppShell>
+        <div className="glass-card p-8">
+          <p className="muted-text">
+            Banco não inicializado. Rode{" "}
+            <code className="lilac-text">npx prisma db seed</code>.
+          </p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const { answers, ...profile } = user;
+
+  const flat: GigiAnswer[] = answers.map((a) => ({
+    questionId: a.questionId,
+    category: a.question.category,
+    activity: a.question.activity,
+    order: a.question.order,
+    experience: a.experience,
+    preference: a.preference,
+    notes: a.notes,
+    updatedAt: a.updatedAt,
+  }));
 
   const groups = CATEGORIES.filter((c) => c !== "Notas Adicionais").map(
     (category) => ({
       category,
-      items: answers
+      items: flat
         .filter((a) => a.category === category)
         .sort((a, b) => a.order - b.order),
     }),
   );
 
-  const totalAnswered = answers.filter((a) => a.preference !== null).length;
+  const totalAnswered = flat.filter((a) => a.preference !== null).length;
 
   return (
     <AppShell>
@@ -119,7 +119,17 @@ export default async function Page() {
   );
 }
 
-function ProfileCard({ profile }: { profile: GigiResponse["profile"] }) {
+type ProfileLike = {
+  name: string;
+  role: string | null;
+  specificFetishes: string | null;
+  painTolerance: number | null;
+  orientation: string | null;
+  medicalCondition: string | null;
+  limitations: string | null;
+};
+
+function ProfileCard({ profile }: { profile: ProfileLike }) {
   const fields: { label: string; value: string }[] = [
     { label: "Nome", value: profile.name },
     { label: "Função identificada", value: profile.role ?? "—" },

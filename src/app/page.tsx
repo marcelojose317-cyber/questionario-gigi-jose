@@ -1,56 +1,79 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { AppShell } from "@/components/AppShell";
 import { SafetyNotice } from "@/components/SafetyNotice";
 import { UserStatusCard } from "@/components/UserStatusCard";
 import { MetricCard } from "@/components/MetricCard";
 import { InsightCard } from "@/components/InsightCard";
 import { ProgressBar } from "@/components/ProgressBar";
-import type { CompareItem, CompareReport } from "@/lib/compare";
+import { prisma } from "@/lib/prisma";
+import {
+  buildCompareReport,
+  type CompareItem,
+  type CompareReport,
+} from "@/lib/compare";
 import { PREFERENCE_LABELS, type Preference } from "@/data/questionnaire";
 
-type CompareApiResponse = {
-  users: {
-    gigi: {
-      id: string;
-      name: string;
-      slug: string;
-      role: string | null;
-      orientation: string | null;
-      answeredCount: number;
-    };
-    jose: {
-      id: string;
-      name: string;
-      slug: string;
-      role: string | null;
-      orientation: string | null;
-      answeredCount: number;
-    };
-  };
-  totalQuestions: number;
-  report: CompareReport;
-};
+export const dynamic = "force-dynamic";
 
 type ReadyReport = Extract<CompareReport, { status: "ready" }>;
 type WaitingReport = Extract<CompareReport, { status: "waiting_for_jose" }>;
 
-async function fetchCompare(): Promise<CompareApiResponse> {
-  const h = await headers();
-  const host = h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? "http";
-  const res = await fetch(`${proto}://${host}/api/compare`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`Falha ao consultar /api/compare (${res.status})`);
+async function loadData() {
+  const [questions, gigi, jose] = await Promise.all([
+    prisma.question.findMany({ orderBy: { order: "asc" } }),
+    prisma.user.findUnique({
+      where: { slug: "gigi" },
+      include: { answers: true },
+    }),
+    prisma.user.findUnique({
+      where: { slug: "jose" },
+      include: { answers: true },
+    }),
+  ]);
+
+  if (!gigi || !jose) {
+    throw new Error("Usuários não provisionados. Rode o seed.");
   }
-  return res.json();
+
+  const gigiAnsweredCount = gigi.answers.filter(
+    (a) => a.preference !== null,
+  ).length;
+  const joseAnsweredCount = jose.answers.filter(
+    (a) => a.preference !== null,
+  ).length;
+
+  const report = buildCompareReport(
+    questions,
+    gigi.answers.map((a) => ({
+      questionId: a.questionId,
+      preference: (a.preference as Preference | null) ?? null,
+    })),
+    jose.answers.map((a) => ({
+      questionId: a.questionId,
+      preference: (a.preference as Preference | null) ?? null,
+    })),
+  );
+
+  return {
+    users: {
+      gigi: {
+        role: gigi.role,
+        orientation: gigi.orientation,
+        answeredCount: gigiAnsweredCount,
+      },
+      jose: {
+        role: jose.role,
+        orientation: jose.orientation,
+        answeredCount: joseAnsweredCount,
+      },
+    },
+    totalQuestions: questions.length,
+    report,
+  };
 }
 
 export default async function Home() {
-  const data = await fetchCompare();
-  const { users, totalQuestions, report } = data;
+  const { users, totalQuestions, report } = await loadData();
 
   const gigiStatus = "Concluído";
   const joseStatus =
